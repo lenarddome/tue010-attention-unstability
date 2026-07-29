@@ -14,11 +14,13 @@ using namespace arma;
  * @param pnorm double. The p-norm value used for normalization.
  * @param P double. The exponent used for p-norm normalization.
  * @param rho double. The scaling factor for the salience calculation.
+ * @param suppress_diagonal bool. Whether to zero the diagonal of the intermediate attended-activations matrix to suppress self-connections. Only meaningful when `weights` is square and rows/columns index the same nodes (the auto-associative models). On a rectangular `weights` matrix (e.g. a bipartite stimulus-feature x outcome-node model), Armadillo's `.diag()` only touches `min(n_rows, n_cols)` cells, which would suppress an arbitrary entry in some output rows and none in others rather than any real self-connection — pass `false` in that case.
  * @return rowvec. The salience vector representing the attention shift for each input node.
  */
 // [[Rcpp::export]]
 arma::rowvec AttentionShift(arma::mat weights, arma::colvec predictions, arma::rowvec input,
-                            arma::colvec error, arma::rowvec gain, double pnorm, double P, double rho)
+                            arma::colvec error, arma::rowvec gain, double pnorm, double P, double rho,
+                            bool suppress_diagonal = true)
 {
     rowvec salience(gain);                                                // salience vector
     mat attended_activations(weights.n_rows, weights.n_cols, fill::ones); // creaate a matrix to hold intermediate computations
@@ -35,7 +37,10 @@ arma::rowvec AttentionShift(arma::mat weights, arma::colvec predictions, arma::r
     // calculate the attended activations
     attended_activations.each_col() % predictions; // modulate by prediction error
     attended_activations.each_row() % salience;    // modulate by input
-    attended_activations.diag().zeros();           // set diagonal to 0
+    if (suppress_diagonal)
+    {
+        attended_activations.diag().zeros(); // set diagonal to 0 (self-connection suppression; square models only)
+    }
 
     mat out = (activations - attended_activations); // calculate the difference between activations and attended activations
     out = out.each_col() % error;                   // modulate by the error

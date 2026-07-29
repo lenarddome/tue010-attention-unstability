@@ -47,5 +47,8 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# Generated analysis figures
+exploring-attentional-shifts/figures/
 exploring-attentional-shifts/.DS_Store
 .DS_Store

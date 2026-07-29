@@ -1,0 +1,27 @@
+\documentclass{report}
+\usepackage{booktabs}
+\usepackage{multirow}
+\begin{document}
+\begin{table}[]
+    \centering
+
+    % \begin{tabular}{\tblwidth}{c@{\hspace{12pt}}cccc@{\hspace{12pt}}ccccc@{\hspace{12pt}}ccccc@{\hspace{12pt}}ccc}
+% \setlength{\tabcolsep}{10pt}
+\begin{tabular}{c@{\hspace{24pt}}cccc@{\hspace{24pt}}ccccc@{\hspace{24pt}}ccccc@{\hspace{24pt}}ccc}
+\toprule
+\multirow{3}{*}{Stimulus} & \multicolumn{4}{c}{Input Pattern} & \multicolumn{13}{c}{Feedback Vector} \\
+\cmidrule(lr){2-5} \cmidrule(lr){6-18}
+ & \multirow{2}{*}{$S_1$} & \multirow{2}{*}{$S_2$} & \multirow{2}{*}{$S_3$} & \multirow{2}{*}{$S_4$} & \multicolumn{5}{c}{Non-overlapping} & \multicolumn{5}{c}{Overlapping (All)} & \multicolumn{3}{c}{\shortstack{Overlapping\\(Features)}} \\
+\cmidrule(lr){6-10} \cmidrule(lr){11-15} \cmidrule(lr){16-18}
+ & & & & & $O_1$ & $O_2$ & $O_3$ & $O_4$ & $O_5$ &  $O_1$ & $O_2$ & $O_3$ & $O_4$ & $O_5$ & $O_1$ & $O_2$ & $O_3$  \\
+\midrule
+A & 1 & 0 & 1 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & 1 & 0 & 1 & 0 \\
+B & 0 & 1 & 1 & 0 & 1 & 0 & 1 & 0 & 0 & 1 & 0 & 1 & 0 & 0 & 1 & 0 & 0 \\
+C & 0 & 1 & 0 & 1 & 0 & 0 & 0 & 1 & 1 & 0 & 0 & 1 & 1 & 1 & 0 & 0 & 1
+ \\
+\bottomrule
+    \end{tabular}
+    \caption{ Stimulus Input Patterns and Feedback Vectors Across Overlap Conditions}
+    \label{tab:placeholder}
+\end{table}
+\end{document}
