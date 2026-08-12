@@ -9,7 +9,7 @@
 ##
 ## Unlike analyse.R (auto-associative: the same 5 nodes serve as both
 ## stimulus features and outcome nodes, square weights), this uses a
-## bipartite model: 4 stimulus-Input Nodes are a separate population from
+## bipartite model: 4 stimulus-feature nodes are a separate population from
 ## 5 outcome nodes (rectangular weights), so there is no self-connection to
 ## suppress (suppress_diagonal = FALSE throughout). Three stimuli share
 ## overlapping active features so attention faces genuine competition when
@@ -123,12 +123,16 @@ run_round_robin_matrix <- function(weights, attention_matrix_initial, stimuli, P
 }
 
 ## ---- Stimulus set -------------------------------------------------------------
-## 4 Input Nodes -> 5 outcome nodes. Active-feature overlap across stimuli is
+## 4 feature nodes -> 5 outcome nodes. Active-feature overlap across stimuli is
 ## deliberately graded to create a spectrum of competition for attention:
+##   feature 1 (A & B only): teachers {2,5} vs {1,3} share no outcome  -> pure conflict
+##   feature 2 (A & C):      teachers {2,5} vs {3,4,5} share outcome 5 -> partial conflict
+##   feature 3 (B & C):      teachers {1,3} vs {3,4,5} share outcome 3 -> partial conflict
+##   feature 4 (C only):     no other stimulus touches it              -> no competition (control)
 stimuli <- list(
-    list(name = "A", input = c(1, 0, 1, 0), teacher = c(0, 1, 0, 0, 0)),
-    list(name = "B", input = c(0, 1, 1, 0), teacher = c(1, 0, 1, 0, 0)),
-    list(name = "C", input = c(0, 1, 0, 1), teacher = c(0, 0, 0, 1, 1))
+    list(name = "A", input = c(1, 0, 1, 0), teacher = c(0, 1, 0)),
+    list(name = "B", input = c(0, 1, 1, 0), teacher = c(1, 0, 0)),
+    list(name = "C", input = c(0, 1, 0, 1), teacher = c(0, 0, 1))
 )
 
 ## ---- Export stimulus/feedback vectors as a LaTeX table -----------------------
@@ -137,7 +141,7 @@ stimuli <- list(
 ## (+ .pdf/.png). Raw stimuli are also saved as RDS so a later combining step
 ## can build one 4-column table across all analyse-multi-outcome-*.R
 ## conditions without re-running each script's full simulation.
-condition_name <- "non_overlapping"
+condition_name <- "overlapping_features"
 saveRDS(stimuli, file.path(tables_dir, paste0("stimuli_", condition_name, ".rds")))
 compile_latex_to_png(
     write_exemplar_table_tex(stimuli),
@@ -158,6 +162,11 @@ n_active_by_stimulus <- data.table(
     n_active = vapply(stimuli, function(s) sum(s$input), numeric(1))
 )
 
+## single global seed covers every random draw in this script (attention
+## init, weight init, and the shuffled stimulus order below) so a full run
+## is reproducible end to end from one point.
+set.seed(12)
+
 attention_initial <- runif(n_features, 0, 0.1)
 
 ## the matrix (per-row) condition starts from the same vector broadcast to
@@ -166,8 +175,7 @@ attention_initial <- runif(n_features, 0, 0.1)
 attention_matrix_initial <- matrix(rep(attention_initial, each = n_outcomes), nrow = n_outcomes)
 
 ## ---- Weights: pretrain round-robin across all three pairs --------------------
-set.seed(12)
-dist <- rnorm(n_outcomes * n_features, 0.25, 0.5)
+dist <- rnorm(n_outcomes * n_features, 0., 0.025)
 dist <- pmax(pmin(dist, 1), -1) # Clamp to [-1, 1]
 weights <- matrix(dist, nrow = n_outcomes, ncol = n_features) # no diag zeroing: rectangular, no self-connections
 print("Initial Weights:")
@@ -180,9 +188,11 @@ print(weights)
 ## active for the current stimulus (outer(error, input)) rather than applied
 ## uniformly across the whole row: an ungated nudge would also perturb
 ## columns the current stimulus never touches, corrupting the fit for
-## whichever other stimulus relies on them.
+## whichever other stimulus relies on them. Presentation order is reshuffled
+## every epoch (sample(stimuli)) so the weights aren't biased by always
+## seeing the same A/B/C sequence.
 for (epoch in seq_len(50)) {
-    for (s in stimuli) {
+    for (s in sample(stimuli)) {
         input_matrix_s <- sweep(matrix(1, nrow = n_outcomes, ncol = n_features), 2, s$input, "*")
         predictions_s <- rowSums(weights * input_matrix_s)
         weights <- weights + outer((s$teacher - predictions_s) * 0.1, s$input)
@@ -250,7 +260,7 @@ attention_delta_matrix_multi_grid[, rho_label := sprintf("rho=%.2f", rho)]
 stimulus_phase <- unique(attention_multi_grid[, .(iteration, stimulus_name, rho_label)])
 
 ## ---- Plot (a): shared-vector attention trajectories --------------------------
-## One continuous line per Input Node across the whole rotation (not
+## One continuous line per feature node across the whole rotation (not
 ## faceted by stimulus, which would fragment each line and hide the
 ## cross-switch persistence that is the whole point).
 attention_multi_plot <- ggplot() +
@@ -269,18 +279,19 @@ attention_multi_plot <- ggplot() +
     scale_fill_manual(values = c("A" = "grey75", "B" = "grey45", "C" = "grey15")) +
     theme_par() +
     labs(
-        title = "Shared Attention Trajectories Across a Round-Robin Stimulus Rotation",
-        x = "Stimulus Repetition",
-        y = expression(rho),
-        fill = "Lower Boundary\nHits"
+        title = "Shared Attention Trajectories Across a Stimulus Rotation",
+        x = "Iteration",
+        y = "Attention Value",
+        color = "Feature Node",
+        fill = "Active Stimulus"
     ) +
     bottom_legend_theme()
 
-save_figure(attention_multi_plot, "non_overlapping_multi_outcome_shared_attention_values.png", dir = figures_dir)
+save_figure(attention_multi_plot, "overlapping_features_outcome_shared_attention_values.png", dir = figures_dir)
 
 ## ---- Plot (b): shared-vector attention shift boundary hits -------------------
 ## The raw gradient trajectories were too busy to read at a glance (every
-## Input Node's shift, every iteration, every rho, all overplotted). Instead,
+## feature node's shift, every iteration, every rho, all overplotted). Instead,
 ## count how often a shift saturates at the LOWER tanh boundary specifically
 ## (shift = -1, i.e. AttentionShift's rho * pnorm^-1 term has grown large
 ## enough to saturate while driving attention toward the clamp floor -- the
@@ -302,15 +313,15 @@ boundary_hits_shared[, boundary_hit_share := boundary_hits / n_active]
 
 boundary_hits_shared_plot <- ggplot(
     boundary_hits_shared,
-    aes(x = factor(cycle, levels = seq_len(n_cycles)), y = rho, fill = boundary_hit_share)
+    aes(x = factor(cycle, levels = seq_len(n_cycles)), y = rho_label, fill = boundary_hit_share)
 ) +
     geom_tile(color = "white") +
     facet_wrap(~stimulus_name, nrow = 1) +
     scale_fill_viridis_c(option = "D", labels = scales::percent, limits = c(0, 1)) +
     theme_par() +
     labs(
-        title = "Shared Attention Trajectories Across a Round-Robin Stimulus Rotation",
-        x = "Stimulus Repetition",
+        title = "Shared Attention Shift: Share of Active Features at Lower Boundary",
+        x = "Iteration",
         y = expression(rho),
         fill = "Lower Boundary\nHits"
     ) +
@@ -318,7 +329,7 @@ boundary_hits_shared_plot <- ggplot(
 
 
 ## ---- Plot (a2): matrix (per-row) attention trajectories, row_by_row style ----
-## Mirrors analyse.R's row_by_row_* plots: every Output Node has its own
+## Mirrors analyse.R's row_by_row_* plots: every outcome row has its own
 ## private attention vector, so faceting by row_id shows each row's
 ## trajectory separately.
 attention_matrix_multi_plot <- ggplot() +
@@ -337,19 +348,19 @@ attention_matrix_multi_plot <- ggplot() +
     scale_fill_manual(values = c("A" = "grey75", "B" = "grey45", "C" = "grey15")) +
     theme_par() +
     labs(
-        title = "Per-Row Attention Matrix Trajectories Across a Round-Robin Stimulus Rotation",
+        title = "Per-Row Attention Matrix Trajectories Across a Stimulus Rotation",
         x = "Iteration",
         y = "Attention Value",
-        color = "Input Node",
+        color = "Feature Node",
         fill = "Active Stimulus"
     ) +
     bottom_legend_theme()
 
-save_figure(attention_matrix_multi_plot, "non_overlapping_multi_outcome_matrix_attention_values.png", dir = figures_dir, height = 12)
+save_figure(attention_matrix_multi_plot, "overlapping_features_outcome_matrix_attention_values.png", dir = figures_dir, height = 12)
 
 ## ---- Plot (b2): matrix (per-row) attention shift boundary hits ---------------
 ## Same lower-boundary-hit count as above (shift = -1 only), summed across
-## both Output Nodes and Input Nodes, then converted to a share of the
+## both outcome rows and feature nodes, then converted to a share of the
 ## eligible row x active-feature cells (n_outcomes * n_active for that
 ## stimulus) -- the matrix analogue of the shared-vector share plot above, on
 ## the same 0-100% scale for direct comparison. Again keyed on each
@@ -363,15 +374,15 @@ boundary_hits_matrix[, boundary_hit_share := boundary_hits / (n_active * n_outco
 
 boundary_hits_matrix_plot <- ggplot(
     boundary_hits_matrix,
-    aes(x = factor(cycle, levels = seq_len(n_cycles)), y = rho, fill = boundary_hit_share)
+    aes(x = factor(cycle, levels = seq_len(n_cycles)), y = rho_label, fill = boundary_hit_share)
 ) +
     geom_tile(color = "white") +
     facet_wrap(~stimulus_name, nrow = 1) +
     scale_fill_viridis_c(option = "D", labels = scales::percent, limits = c(0, 1)) +
     theme_par() +
     labs(
-        title = "Attention Matrix Shift: Share of Row x Active-Feature Cells at Lower Boundary",
-        x = "Stimulus Repetition",
+        title = "Attention Matrix Shift: Proportion of Active Features Hitting the Lower Boundary",
+        x = "Iteration",
         y = expression(rho),
         fill = "Lower Boundary\nHits"
     ) +
@@ -382,7 +393,7 @@ boundary_hits_matrix_plot <- ggplot(
 ## Direct test of the destabilization claim, comparing the two conditions
 ## head to head: within-cycle variance of each feature's attention value,
 ## the first complete cycle vs the last complete cycle. For the matrix
-## condition, a feature's attention is averaged across Output Nodes first so
+## condition, a feature's attention is averaged across outcome rows first so
 ## it sits on the same footing as the shared vector's single value per
 ## feature. Feature 1 (pure conflict between A and B) is expected to show
 ## the steepest variance growth under the shared condition specifically;
@@ -421,13 +432,13 @@ instability_plot <- ggplot(
         title = "Per-Feature Attention Instability: Shared Vector vs Attention Matrix",
         x = "Rho",
         y = "Within-Cycle Attention Variance",
-        color = "Input Node"
+        color = "Feature Node"
     ) +
     theme(legend.position = "bottom")
 
 save_figure(
     instability_plot,
-    "non_overlapping_multi_outcome_instability_shared_vs_matrix.png",
+    "overlapping_features_outcome_instability_shared_vs_matrix.png",
     dir = figures_dir,
     width = 14,
     height = 9
@@ -456,7 +467,7 @@ final_shared_state <- attention_multi_grid[
 ]
 final_shared_state <- final_shared_state[, attention_value := sum(attention_value), by = .(panel, row_label, feature_node)]
 
-## normalise each run to sum to 1 -- each Output Node's own vector for the
+## normalise each run to sum to 1 -- each outcome row's own vector for the
 ## matrix condition, and the single shared vector as a whole -- so the
 ## heatmap shows how attention is *allocated* across features within a run
 ## rather than raw magnitudes that differ in scale from run to run.
@@ -517,28 +528,32 @@ weights_heatmap <- ggplot(
         legend.position = "bottom",
     )
 
-## ---- Combine: heatmap+weights on top, boundary-hit heatmaps as two rows below ----
-attention_allocation_top_row <- wrap_plots(
-    plot_spacer(), attention_allocation_heatmap, plot_spacer(),
-    weights_heatmap, plot_spacer(),
-    nrow = 1,
-    widths = c(0.03, 1, 0.1, 1, 0.03)
-)
 
-attention_allocation_combined <- attention_allocation_top_row /
-    boundary_hits_shared_plot /
-    boundary_hits_matrix_plot +
-    plot_layout(heights = c(1.5, 1, 1)) +
-    plot_annotation(
-        title = "Simulation 2",
-        subtitle = paste("At", heatmap_rho_label, "after", n_cycles, "repetitions per stimulus")
-    ) &
+## ---- Combine: heatmaps to the left, aligned row-by-row with the boundary-hit heatmaps ----
+## attention_allocation_heatmap sits beside boundary_hits_shared_plot (both
+## are the "shared attention" row); weights_heatmap sits beside
+## boundary_hits_matrix_plot (both are the "attention matrix" row). Each row
+## gets its own width ratio because the boundary-hit plots facet by stimulus
+## (3 panels) while the heatmaps are single-panel, so the boundary-hit side
+## needs more horizontal room.
+## Titles cleared on the two heatmaps here: at this narrow a column width
+## their long titles overflow into the neighboring boundary-hit panel's
+## title (ggplot title grobs aren't clipped to their column), and both
+## heatmaps are only ever used in this combined figure, never saved alone.
+top_row <- (attention_allocation_heatmap + labs(title = NULL)) + boundary_hits_shared_plot +
+    plot_layout(widths = c(0.5, 2))
+
+bottom_row <- (weights_heatmap + labs(title = NULL)) + boundary_hits_matrix_plot +
+    plot_layout(widths = c(0.5, 2))
+
+attention_allocation_combined <- top_row / bottom_row +
+    plot_layout(heights = c(1, 1)) &
     theme(plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"))
 
 save_figure(
     attention_allocation_combined,
-    "figure-simulation-2-results.png",
+    "figure-simulation-3-results.png",
     dir = figures_dir,
-    width = 10,
+    width = 20,
     height = 12
 )

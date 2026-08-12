@@ -128,9 +128,9 @@ run_round_robin_matrix <- function(weights, attention_matrix_initial, stimuli, P
 ##   feature 3 (B & C):      teachers {1,3} vs {3,4,5} share outcome 3 -> partial conflict
 ##   feature 4 (C only):     no other stimulus touches it              -> no competition (control)
 stimuli <- list(
-    list(name = "A", input = c(1, 0, 0, 0), teacher = c(0, 1, 0, 0, 1)),
-    list(name = "B", input = c(0, 0, 1, 0), teacher = c(1, 0, 1, 0, 0)),
-    list(name = "C", input = c(0, 1, 0, 1), teacher = c(0, 0, 1, 1, 1))
+    list(name = "A", input = c(1, 0, 0, 0), teacher = c(0)),
+    list(name = "B", input = c(0, 0, 1, 0), teacher = c(1)),
+    list(name = "C", input = c(0, 1, 0, 1), teacher = c(0))
 )
 
 n_features <- length(stimuli[[1]]$input)
