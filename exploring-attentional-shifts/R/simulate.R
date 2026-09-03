@@ -163,6 +163,8 @@ attention_shift_loop_matrix <- function(weights, input, attention_matrix, P, rho
         attention = attention_history,
         attention_delta = attention_delta_history,
         attention_matrix_final = attention_prime,
-        example_row = attention_shift_row
+        example_row = attention_shift_row,
+        prediction = prediction_history,
+        error = error_history
     )
 }

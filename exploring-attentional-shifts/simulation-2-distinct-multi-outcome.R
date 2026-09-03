@@ -305,21 +305,8 @@ boundary_hits_shared <- attention_delta_multi_grid[
 boundary_hits_shared <- merge(boundary_hits_shared, n_active_by_stimulus, by = "stimulus_name")
 boundary_hits_shared[, boundary_hit_share := boundary_hits / n_active]
 
-boundary_hits_shared_plot <- ggplot(
-    boundary_hits_shared,
-    aes(x = factor(cycle, levels = seq_len(n_cycles)), y = rho, fill = boundary_hit_share)
-) +
-    geom_tile(color = "white") +
-    facet_wrap(~stimulus_name, nrow = 1) +
-    scale_fill_viridis_c(option = "D", labels = scales::percent, limits = c(0, 1)) +
-    theme_par() +
-    labs(
-        title = "Shared Attention Trajectories Across a Stimulus Rotation",
-        x = "Iteration",
-        y = expression(rho),
-        fill = "Lower Boundary\nHits"
-    ) +
-    theme(axis.text.y = element_text(size = 7))
+## The share is not plotted on its own: the step-curve plot below is built from
+## both conditions at once so they share one set of axes -- see "Plot (b)".
 
 
 ## ---- Plot (a2): matrix (per-row) attention trajectories, row_by_row style ----
@@ -366,21 +353,97 @@ boundary_hits_matrix <- attention_delta_matrix_multi_grid[
 boundary_hits_matrix <- merge(boundary_hits_matrix, n_active_by_stimulus, by = "stimulus_name")
 boundary_hits_matrix[, boundary_hit_share := boundary_hits / (n_active * n_outcomes)]
 
-boundary_hits_matrix_plot <- ggplot(
-    boundary_hits_matrix,
-    aes(x = factor(cycle, levels = seq_len(n_cycles)), y = rho, fill = boundary_hit_share)
+## ---- Plot (b): boundary hits as step curves, both conditions in one grid ----
+## Rows are the two approaches, columns the three stimuli, x each stimulus's own
+## presentation count, y the share of eligible values pinned at the lower
+## boundary, one step curve per rho.
+##
+## The share sits on an axis rather than in a fill colour because it can only
+## take a handful of values -- every stimulus in this script has exactly 2
+## active features, so the shared vector's share is one of 0, 50% or 100% -- and
+## a continuous colour ramp implies a precision the measure does not have.
+## The points are the measurements and the line only joins them: the share is
+## defined at a presentation and nowhere between two of them, so a segment
+## running from 0 to 100% passes through 25% and 73%, which this measure cannot
+## produce. Hence heavy points over a light line rather than the other way
+## round. rho keeps the viridis ramp; it is the ordered sweep parameter, and
+## colour is the right channel for it once the quantity has an axis of its own.
+##
+## The two rows are NOT scored out of the same denominator, which is why each
+## strip says what its share is of: the shared vector holds one attention value
+## per feature (n_active per stimulus), the attention matrix one per outcome row
+## x feature (n_active * n_outcomes). The same percentage therefore means "1 of
+## 2 features" on top and "5 of 10 row x feature cells" underneath, and the
+## bottom row is mechanically pulled toward lower shares.
+shared_approach_label <- "Shared vector
+(of active features)"
+matrix_approach_label <- "Attention matrix
+(of outcome row x feature cells)"
+
+boundary_hits_by_approach <- rbind(
+    data.table(boundary_hits_shared, approach = shared_approach_label),
+    data.table(boundary_hits_matrix, approach = matrix_approach_label)
+)
+boundary_hits_by_approach[
+    , approach := factor(approach, levels = c(shared_approach_label, matrix_approach_label))
+]
+
+## Curves for different rho coincide wherever they share an onset -- once rho is
+## above 0 the shared vector saturates at much the same presentation, which is
+## itself part of the result. Drawing in descending rho order makes the colour
+## of an overlapping bundle mean something definite: the visible line is the
+## *lowest* rho that reaches that path, so "everything from this rho upward
+## behaves like this" can be read straight off the fan.
+##
+## ggplot draws one group at a time in the order of the grouping variable's
+## levels, so the draw order has to be carried by an explicitly reversed factor
+## -- grouping on the numeric rho would put the highest rho on top instead.
+## Row order does the same job for the point layer, which draws in data order.
+boundary_hits_by_approach[
+    , rho_draw_order := factor(rho, levels = sort(unique(rho), decreasing = TRUE))
+]
+setorder(boundary_hits_by_approach, -rho)
+
+## rho = 0 is the no-shift control: attention never moves, so nothing can reach
+## the boundary and its curve is a flat 0 in every panel. It is left out of the
+## plot (the saved sweep above still carries it) so the ramp's whole range goes
+## to the values that vary, while the scale limits below stay floored at 0 so a
+## colour means the same rho here as it does in figure-boundary-hits.png.
+##
+## Shape repeats what the facet rows already say -- circle for the shared
+## vector, triangle for the attention matrix -- with no legend of its own. It
+## earns its place across figures rather than within this one: in the combined
+## figure the two approaches share a panel, and a triangle means the attention
+## matrix in both.
+boundary_hits_plot <- ggplot(
+    boundary_hits_by_approach[rho > 0],
+    aes(x = cycle, y = boundary_hit_share, colour = rho, group = rho_draw_order)
 ) +
-    geom_tile(color = "white") +
-    facet_wrap(~stimulus_name, nrow = 1) +
-    scale_fill_viridis_c(option = "D", labels = scales::percent, limits = c(0, 1)) +
+    geom_line(linewidth = 0.4) +
+    geom_point(aes(shape = approach), size = 2.5) +
+    facet_grid(approach ~ stimulus_name) +
+    scale_x_continuous(breaks = integer_breaks) +
+    scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.5, 1), labels = scales::percent) +
+    scale_colour_viridis_c(option = "D", limits = range(rho_values)) +
+    scale_shape_manual(values = c(16, 17)) +
+    guides(shape = "none", colour = guide_colourbar(theme = theme(
+        legend.title.position = "top",
+        legend.key.width = unit(4, "cm"),
+        legend.key.height = unit(0.4, "cm")
+    ))) +
     theme_par() +
     labs(
-        title = "Attention Matrix Shift: Share of Row x Active-Feature Cells at Lower Boundary",
+        title = "Attention Shifts Pinned at the Lower Boundary",
         x = "Iteration",
-        y = expression(rho),
-        fill = "Lower Boundary\nHits"
+        y = "Share at Lower Boundary",
+        colour = expression(rho)
     ) +
-    theme(axis.text.y = element_text(size = 7))
+    theme(
+        legend.position = "bottom",
+        legend.justification = "center",
+        legend.title = element_text(hjust = 0.5),
+        strip.text.y = element_text(size = 8)
+    )
 
 
 ## ---- Comparative instability plot: shared vector vs attention matrix --------
@@ -439,13 +502,18 @@ save_figure(
 )
 
 ## ---- Comparative heatmap: final attention allocation ------------------------
-## At the highest rho in the grid, the state after all n_iterations_multi
-## iterations. The attention matrix genuinely has row structure (one vector
-## per outcome node); the shared vector is a single vector, not a matrix. Each
-## gets its own panel (facet_grid with space = "free_y" sizes each panel's
-## height by its own number of rows, so the single-row shared-vector panel
-## isn't stretched to match the 5-row matrix panel) rather than forcing both
-## onto one shared y-axis.
+## The state after all n_iterations_multi iterations, at one rho from the sweep.
+## The attention matrix genuinely has row structure (one vector per outcome
+## node); the shared vector is a single vector, not a matrix. Each gets its own
+## panel (facet_grid with space = "free_y" sizes each panel's height by its own
+## number of rows, so the single-row shared-vector panel isn't stretched to
+## match the 5-row matrix panel) rather than forcing both onto one shared
+## y-axis.
+##
+## The index here must stay the same in all three simulation scripts:
+## combine-stimulus-set-heatmaps.R puts these three snapshots side by side as
+## the columns of one figure, and columns taken at different rho are not
+## comparable. rho_values[6] is rho = 1.11.
 heatmap_rho_label <- sprintf("rho=%.2f", rho_values)[6]
 final_iteration <- n_iterations_multi
 
@@ -522,31 +590,48 @@ weights_heatmap <- ggplot(
         legend.position = "bottom",
     )
 
-## ---- Combine: heatmaps to the left, aligned row-by-row with the boundary-hit heatmaps ----
-## attention_allocation_heatmap sits beside boundary_hits_shared_plot (both
-## are the "shared attention" row); weights_heatmap sits beside
-## boundary_hits_matrix_plot (both are the "attention matrix" row). Each row
-## gets its own width ratio because the boundary-hit plots facet by stimulus
-## (3 panels) while the heatmaps are single-panel, so the boundary-hit side
-## needs more horizontal room.
-## Titles cleared on the two heatmaps here: at this narrow a column width
-## their long titles overflow into the neighboring boundary-hit panel's
-## title (ggplot title grobs aren't clipped to their column), and both
-## heatmaps are only ever used in this combined figure, never saved alone.
-top_row <- (attention_allocation_heatmap + labs(title = NULL)) + boundary_hits_shared_plot +
-    plot_layout(widths = c(0.5, 2))
+## ---- Export the two stimulus-set heatmaps for the combined figure ----------
+## attention_allocation_heatmap and weights_heatmap describe this stimulus set
+## itself (where attention ended up, and which input->output links are
+## excitatory vs inhibitory) rather than the rho x iteration sweep, so they no
+## longer sit in the left column of this script's results figure. They are
+## saved here and laid out side by side with the other two conditions' by
+## combine-stimulus-set-heatmaps.R -- the same read-the-saved-object-rather-
+## than-re-run-the-simulation pattern combine-exemplar-tables.R uses for the
+## stimulus tables.
+## rho_label and cycle travel with the panels because they are not the same
+## across the three scripts (each picks the rho that best shows its own
+## condition), and the combined figure has to say which rho each column is at
+## rather than implying one common sweep point.
+saveRDS(
+    list(
+        allocation = attention_allocation_heatmap,
+        weights = weights_heatmap,
+        rho_label = heatmap_rho_label,
+        cycle = n_cycles
+    ),
+    file.path(figures_dir, paste0("panels_", condition_name, ".rds"))
+)
 
-bottom_row <- (weights_heatmap + labs(title = NULL)) + boundary_hits_matrix_plot +
-    plot_layout(widths = c(0.5, 2))
-
-attention_allocation_combined <- top_row / bottom_row +
-    plot_layout(heights = c(1, 1)) &
-    theme(plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"))
+## ---- Export the boundary-hit sweep for the cross-condition figure ----------
+## Same reason as the panels above: combine-boundary-hits.R lays all three
+## stimulus sets out in one grid, reading these tables rather than re-running
+## any simulation.
+saveRDS(
+    list(
+        shared = boundary_hits_shared,
+        matrix = boundary_hits_matrix,
+        n_outcomes = n_outcomes,
+        n_cycles = n_cycles,
+        rho_values = rho_values
+    ),
+    file.path(figures_dir, paste0("boundary_hits_", condition_name, ".rds"))
+)
 
 save_figure(
-    attention_allocation_combined,
+    boundary_hits_plot,
     "figure-simulation-2-results.png",
     dir = figures_dir,
-    width = 20,
-    height = 12
+    width = 11,
+    height = 6.5
 )

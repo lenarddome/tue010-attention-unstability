@@ -33,5 +33,16 @@ save_figure <- function(plot, filename, dir, width = 22, height = 11, dpi = 300)
     if (!dir.exists(dir)) {
         dir.create(dir, recursive = TRUE)
     }
-    ggsave(filename = file.path(dir, filename), plot = plot, dpi = dpi, width = width, height = height)
+    ## bg = "white" because theme_par() leaves plot.background transparent, and
+    ## ggsave then writes a PNG with a fully transparent background -- fine until
+    ## the figure lands on anything dark, where the black axis text and titles
+    ## disappear into it.
+    ggsave(
+        filename = file.path(dir, filename),
+        plot = plot,
+        dpi = dpi,
+        width = width,
+        height = height,
+        bg = "white"
+    )
 }
