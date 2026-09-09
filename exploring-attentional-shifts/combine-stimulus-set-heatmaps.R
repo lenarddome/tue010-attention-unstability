@@ -84,11 +84,19 @@ allocation_panels <- lapply(names(conditions), function(condition_label) {
     panels <- panels_by_condition[[condition_label]]
     panels$allocation +
         scale_fill_viridis_c(option = "D", limits = c(0, 1)) +
-        guides(fill = guide_colourbar(theme = theme(
-            legend.title.position = "top",
-            legend.key.width = unit(4, "cm"),
-            legend.key.height = unit(0.4, "cm")
-        ))) +
+        guides(fill = guide_colourbar(
+            order = 1,
+            ## patchwork ignores this for placement (it collects every guide
+            ## into one area) but it still sets the bar's orientation, without
+            ## which the bar is drawn horizontally and its tick labels collide
+            position = "right",
+            theme = theme(
+                legend.title.position = "top",
+                legend.title = element_text(hjust = 0.5),
+                legend.key.width = unit(0.9, "cm"),
+                legend.key.height = unit(6, "cm")
+            )
+        )) +
         labs(
             title = condition_label,
             subtitle = sprintf("%s, iteration %d", panels$rho_label, panels$cycle),
@@ -98,7 +106,11 @@ allocation_panels <- lapply(names(conditions), function(condition_label) {
 
 weights_panels <- lapply(names(conditions), function(condition_label) {
     panels_by_condition[[condition_label]]$weights +
-        guides(fill = guide_legend(theme = theme(legend.title.position = "top"))) +
+        guides(fill = guide_legend(
+            order = 2,
+            ncol = 1,
+            theme = theme(legend.title.position = "top")
+        )) +
         labs(title = NULL, y = "Output Node")
 })
 
@@ -112,22 +124,27 @@ weights_panels <- lapply(names(conditions), function(condition_label) {
 ## its left side. Collection matches on the exact string, which is why both
 ## families set y = "Output Node" above rather than inheriting the per-panel
 ## labels they were saved with ("Output Node\n" on the allocation heatmaps, ""
-## on the weights ones). The two collected legends sit centred beneath the grid,
-## each with its title stacked above its keys -- side by side the titles
-## otherwise ran into the neighbouring legend's first tick label.
+## on the weights ones).
+##
+## Both collected legends sit in a narrow column down the right, top-justified
+## so they start level with the grid: matching figure 2, where the continuous
+## ramp also runs down the right-hand side. Stacked beneath the grid they cost a
+## band of height across the full width and left large empty margins either
+## side, where on the right they cost only their own width.
+##
+## patchwork collects every guide into one area, so the two cannot be split
+## across two edges (a per-guide position = "bottom" is ignored here). Nesting
+## two patchworks to get one legend per edge would give the rows different
+## widths and break the column alignment the figure depends on.
 stimulus_set_heatmaps <- wrap_plots(
     c(allocation_panels, weights_panels),
     ncol = length(conditions)
 ) +
     plot_layout(guides = "collect", heights = c(1.25, 1), axis_titles = "collect") &
     theme(
-        legend.position = "bottom",
-        legend.box = "vertical",
-        legend.justification = "center",
-        legend.box.just = "top",
+        legend.justification.right = "top",
         legend.title = element_text(hjust = 0.5),
-        legend.box.spacing = unit(0.6, "cm"),
-        legend.spacing.x = unit(1.5, "cm"),
+        legend.box.spacing = unit(0.4, "cm"),
         plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm")
     )
 
@@ -136,5 +153,5 @@ save_figure(
     "figure-1-heatmaps.png",
     dir = figures_dir,
     width = 12.5,
-    height = 12.5
+    height = 9.5
 )
